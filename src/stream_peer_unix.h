@@ -3,7 +3,6 @@
 
 #include <sys/un.h>
 
-#include <godot_cpp/classes/stream_peer.hpp>
 #include <godot_cpp/classes/stream_peer_extension.hpp>
 
 #include <godot_cpp/core/binder_common.hpp>
@@ -29,13 +28,11 @@ protected:
   struct sockaddr_un server_address;
 
 public:
-  virtual Error get_data(uint8_t *p_buffer, int p_bytes);
-  virtual Error get_partial_data(uint8_t *p_buffer, int p_bytes,
-                                 int *r_received);
-  virtual Error put_data(const uint8_t *p_data, int p_bytes);
-  virtual Error put_partial_data(const uint8_t *p_data, int p_bytes,
-                                 int *r_sent);
-  virtual int get_available_bytes();
+  Error _get_data(uint8_t *p_buffer, int p_bytes);
+  Error _get_partial_data(uint8_t *p_buffer, int p_bytes, int *r_received);
+  Error _put_data(const uint8_t *p_data, int p_bytes);
+  Error _put_partial_data(const uint8_t *p_data, int p_bytes, int *r_sent);
+  int _get_available_bytes();
 
   int open(const String path);
   String get_path();
