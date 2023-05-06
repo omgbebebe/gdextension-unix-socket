@@ -1,96 +1,44 @@
-#!python
+#!/usr/bin/env python
 import os
+import sys
 
-opts = Variables([], ARGUMENTS)
+ext_name = "unixsock"
 
-# Define the relative path to the Godot headers.
-godot_headers_path = "godot-cpp/godot-headers"
-godot_bindings_path = "godot-cpp"
+env = SConscript("godot-cpp/SConstruct")
 
-# Gets the standard flags CC, CCX, etc.
-env = DefaultEnvironment()
+# For the reference:
+# - CCFLAGS are compilation flags shared between C and C++
+# - CFLAGS are for C-specific compilation flags
+# - CXXFLAGS are for C++-specific compilation flags
+# - CPPFLAGS are for pre-processor flags
+# - CPPDEFINES are for pre-processor defines
+# - LINKFLAGS are for linking flags
 
-# Define our options. Use future-proofed names for platforms.
-platform_array = ["", "linuxbsd", "macos", "x11", "linux", "osx"]
-opts.Add(EnumVariable("target", "Compilation target", "debug", ["d", "debug", "r", "release"]))
-opts.Add(EnumVariable("macos_arch", "Target macOS architecture", "universal", ["universal", "x86_64", "arm64"]))
-opts.Add(EnumVariable("platform", "Compilation platform", "", platform_array))
-opts.Add(EnumVariable("p", "Alias for 'platform'", "", platform_array))
-opts.Add(BoolVariable("use_llvm", "Use the LLVM / Clang compiler", "no"))
-opts.Add(PathVariable("target_path", "The path where the lib is installed.", "bin/"))
-opts.Add(PathVariable("target_name", "The library name.", "unixsocket", PathVariable.PathAccept))
-
-# Updates the environment with the option variables.
-opts.Update(env)
-
-# Process platform arguments. Here we use the same names as GDNative.
-if env["p"] != "":
-    env["platform"] = env["p"]
-
-if env["platform"] == "macos":
-    env["platform"] = "osx"
-elif env["platform"] in ("x11", "linuxbsd"):
-    env["platform"] = "linux"
-
-if env["platform"] == "":
-    print("No valid target platform selected.")
-    quit()
-
-platform = env["platform"]
-target = env["target"]
-
-# Check our platform specifics.
-if platform == "osx":
-    if not env["use_llvm"]:
-        env["use_llvm"] = "yes"
-
-    flags = list(("-g", "-O2") if target in ("debug", "d") else ("-g", "-O3"))
-    if env["macos_arch"] == "universal":
-        flags.extend(["-arch", "x86_64", "-arch", "arm64"])
-    else:
-        flags.extend(["-arch", env["macos_arch"]])
-    
-    env.Append(LINKFLAGS=flags)
-    env.Append(CCFLAGS=flags + ["-std=c++14"])
-    
-elif platform == "linux":
-    if target in ("debug", "d"):
-        env.Append(CCFLAGS=["-fPIC", "-g3", "-Og"])
-    else:
-        env.Append(CCFLAGS=["-fPIC", "-g", "-O3"])
-
-if env["use_llvm"] == "yes":
-    env["CC"] = "clang"
-    env["CXX"] = "clang++"
-
-SConscript("godot-cpp/SConstruct")
+# tweak this if you want to use different folders, or more folders, to store your source code in.
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
 
 
-def add_sources(sources, dir):
-    for f in os.listdir(dir):
-        if f.endswith(".cpp"):
-            sources.append(dir + "/" + f)
+# Generating the compilation DB (`compile_commands.json`) requires SCons 4.0.0 or later.
+from SCons import __version__ as scons_raw_version
+
+scons_ver = env._get_major_minor_revision(scons_raw_version)
+if scons_ver < (4, 0, 0):
+    print(
+        "The `compiledb=yes` option requires SCons 4.0 or later, but your version is %s."
+        % scons_raw_version
+    )
+    Exit(255)
+
+env.Tool("compilation_db")
+env.Alias("compiledb", env.CompilationDatabase())
 
 
-env.Append(
-    CPPPATH=[
-        godot_headers_path,
-        godot_bindings_path + "/include",
-        godot_bindings_path + "/include/gen/",
-        godot_bindings_path + "/include/core/",
-    ]
+# Build the shared library
+library = env.SharedLibrary(
+    "addons/{}/bin/lib{}{}{}".format(ext_name, ext_name, env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
 )
 
-env.Append(
-    LIBS=[
-        env.File(os.path.join("godot-cpp/bin", "libgodot-cpp.%s.%s.64%s" % (platform, env["target"], env["LIBSUFFIX"])))
-    ]
-)
-
-env.Append(LIBPATH=[godot_bindings_path + "/bin/"])
-
-sources = []
-add_sources(sources, "src")
-
-library = env.SharedLibrary(target=env["target_path"] + "/" + platform + "/" + env["target_name"], source=sources)
 Default(library)
+
